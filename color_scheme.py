@@ -290,7 +290,7 @@ class ColorSchemeDialog(wx.Dialog):
             parent,
             title="Настройка цветовой схемы",
             style=wx.DEFAULT_DIALOG_STYLE,
-            size=wx.Size(400, 120),
+            size=wx.Size(400, 130),
         )
         sz = wx.BoxSizer(wx.VERTICAL)
         self.picker = ColorSchemePicker(self, value, size=wx.Size(350, 50))
