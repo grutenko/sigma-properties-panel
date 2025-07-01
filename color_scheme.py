@@ -28,10 +28,13 @@ class ColorScheme:
     def range(self):
         return abs(self.min_value() - self.max_value())
 
-    def save(self, f): ...
+    def save(self, f):
+        f.write(self.to_string())
 
     @classmethod
-    def load(self, f): ...
+    def load(cls, f):
+        s = f.read()
+        return cls.from_string(s)
 
     def to_string(self):
         schema = list(map(lambda o: list(o), self.schema))
@@ -42,6 +45,20 @@ class ColorScheme:
         schema = json.loads(json_str)
         schema = list(map(lambda o: (o[0], o[1], o[2], o[3]), schema))
         return cls(schema)
+    
+def get_interpol_color_by_pos(color_scheme: ColorScheme, pos: float):
+    if pos < color_scheme.min_value() or pos > color_scheme.max_value():
+        return wx.Colour(0, 0, 0)
+    for i in range(len(color_scheme.schema) - 1):
+        c0 = color_scheme.schema[i]
+        c1 = color_scheme.schema[i + 1]
+        if c0[3] <= pos <= c1[3]:
+            ratio = (pos - c0[3]) / (c1[3] - c0[3])
+            r = int(c0[0] + ratio * (c1[0] - c0[0]))
+            g = int(c0[1] + ratio * (c1[1] - c0[1]))
+            b = int(c0[2] + ratio * (c1[2] - c0[2]))
+            return wx.Colour(r, g, b)
+    return wx.Colour(255, 255, 255)
 
 
 class ColorSchemePicker(wx.Panel):
@@ -87,6 +104,12 @@ class ColorSchemePicker(wx.Panel):
                 lambda e: self.delete_color(index),
                 m.FindItemById(wx.ID_DELETE),
             )
+            m.Append(wx.ID_EDIT, "Изменить цвет")
+            self.Bind(
+                wx.EVT_MENU,
+                lambda e: self.edit_color(index),
+                m.FindItemById(wx.ID_EDIT),
+            )
             self.PopupMenu(m, event.GetPosition())
         else:
             if self.gradient.HasCapture():
@@ -95,6 +118,18 @@ class ColorSchemePicker(wx.Panel):
             m.Append(wx.ID_ADD, "Добавить цвет")
             self.Bind(wx.EVT_MENU, self.on_add_color, m.FindItemById(wx.ID_ADD))
             self.PopupMenu(m, event.GetPosition())
+
+    def edit_color(self, index):
+        r, g, b, p = self.value.schema[index]
+        data = wx.ColourData()
+        data.SetColour(wx.Colour(r, g, b))
+        data.SetChooseFull(True)
+        dlg = wx.ColourDialog(None, data)
+        if dlg.ShowModal() == wx.ID_OK:
+            c = dlg.GetColourData().GetColour()
+            self.value.schema[index] = (c.GetRed(), c.GetGreen(), c.GetBlue(), p)
+            self.gradient.Refresh()
+            self.gradient.Update()
 
     def on_add_color(self, event):
         data = wx.ColourData()
@@ -254,8 +289,8 @@ class ColorSchemeDialog(wx.Dialog):
         super().__init__(
             parent,
             title="Настройка цветовой схемы",
-            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
-            size=wx.Size(350, 150),
+            style=wx.DEFAULT_DIALOG_STYLE,
+            size=wx.Size(400, 120),
         )
         sz = wx.BoxSizer(wx.VERTICAL)
         self.picker = ColorSchemePicker(self, value, size=wx.Size(350, 50))
@@ -268,9 +303,25 @@ class ColorSchemeDialog(wx.Dialog):
         btn_sz.Add(self.btn_load)
         btn_sz.Add(self.btn_save)
         sz.Add(btn_sz, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        btn_sz.AddStretchSpacer()
+        self.btn_cancel = wx.Button(self, label="Отменить")
+        self.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel)
+        btn_sz.Add(self.btn_cancel, 0, wx.EXPAND)
+        self.btn_apply = wx.Button(self, label="Применить")
+        self.btn_apply.Bind(wx.EVT_BUTTON, self.on_apply)
+        self.btn_apply.SetDefault()
+        btn_sz.Add(self.btn_apply, 0, wx.EXPAND)
         self.SetSizer(sz)
         self.Layout()
-        self.Fit()
+
+    def on_apply(self, event):
+        self.EndModal(wx.ID_OK)
+
+    def on_cancel(self, event):
+        self.EndModal(wx.ID_CANCEL)
+
+    def get_value(self):
+        return self.picker.value
 
     def on_save(self, event):
         wildcard = "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
@@ -282,7 +333,8 @@ class ColorSchemeDialog(wx.Dialog):
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT
         ) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
-                path = dlg.GetPath()
+                with open(dlg.GetPath(), "w") as f:
+                    self.picker.value.save(f)
 
     def on_load(self, event):
         wildcard = "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
@@ -294,33 +346,63 @@ class ColorSchemeDialog(wx.Dialog):
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
         ) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
-                path = dlg.GetPath()
+                with open(dlg.GetPath(), "r") as f:
+                    self.picker.value = ColorScheme.load(f)
+                    self.picker.Refresh()
+                    self.picker.Update()
+
+class GradientPanel(wx.Panel):
+    def __init__(self, parent, style, pos, size):
+        super().__init__(parent, style=style, pos=pos, size=size)
+        self.value = None
+        sz = wx.BoxSizer(wx.HORIZONTAL)
+        self.gradient = wx.Panel(self)
+        sz.Add(self.gradient, 1, wx.EXPAND)
+        self.button = wx.Button(self, label="...", style=wx.BU_EXACTFIT)
+        sz.Add(self.button, 0, wx.EXPAND)
+        self.SetSizer(sz)
+        self.Layout()
+        self.gradient.Bind(wx.EVT_PAINT, self.on_paint)
+
+    def on_paint(self, event):
+        if self.value is None:
+            return
+
+        panel = event.GetEventObject()
+        dc = wx.PaintDC(panel)
+        rect: wx.Rect = panel.GetClientRect()
+        rect.Deflate(0, 2)
+
+        width = rect.width
+        height = rect.height
+
+        if width == 0 or height == 0:
+            return
+        for i in range(width):
+            value = self.value.min_value() + (i / width) * self.value.range()
+            color = get_interpol_color_by_pos(self.value, value)
+            dc.SetPen(wx.Pen(color))
+            dc.DrawLine(i + rect.GetLeft(), rect.GetTop(), i + rect.GetLeft(), height + rect.GetTop())
+
+    def set_color_scheme(self, color_scheme):
+        self.value = color_scheme
+        self.Refresh()
+        self.Update()
 
 
 class GradientEditor(wx.propgrid.PGEditor):
     def CreateControls(self, propgrid, property, pos, size):
-        panel = wx.Panel(propgrid, style=wx.NO_BORDER, pos=pos, size=size)
-        panel.SetSize(size)
-        panel.Bind(wx.EVT_PAINT, self.OnPaint)
-        panel.Bind(wx.EVT_LEFT_DOWN, self.OnClick)
-
-        # Сохраняем property и value для отрисовки и клика
-        self.propgrid = propgrid
-        self.property = property
-        self.size = size
-        self.value = None
+        panel = GradientPanel(propgrid, style=wx.NO_BORDER, pos=pos, size=size)
+        panel.Layout()
+        panel.set_color_scheme(property.GetValue())
 
         return wx.propgrid.PGWindowList(panel)
     
     def UpdateControl(self, property: wx.propgrid.PGProperty, ctrl: wx.Window) -> None:
-        self.value = property.GetValue()
-        ctrl.Refresh()
-        ctrl.Update()
+        ctrl.set_color_scheme(property.GetValue())
 
     def SetControlStringValue(self, property: wx.propgrid.PGProperty, ctrl: wx.Window, txt: str) -> None:
-        self.value = ColorScheme.from_string(txt)
-        ctrl.Refresh()
-        ctrl.Update()
+        ctrl.set_color_scheme(property.GetValue())
     
     def get_color(self, scheme, value):
         if value < scheme.min_value() or value > scheme.max_value():
@@ -340,7 +422,6 @@ class GradientEditor(wx.propgrid.PGEditor):
         propvalue = ColorScheme.from_string(text)
         stops = getattr(propvalue, 'schema')
         self.value = propvalue
-        print(ColorScheme.from_string(text))
 
         if not stops or len(stops) < 2:
             dc.SetBrush(wx.Brush(wx.WHITE))
@@ -366,7 +447,7 @@ class GradientEditor(wx.propgrid.PGEditor):
         panel = event.GetEventObject()
         dc = wx.PaintDC(panel)
         rect: wx.Rect = panel.GetClientRect()
-        rect.Deflate(2, 2)
+        rect.Deflate(0, 2)
 
         self.DrawValue(dc, rect, None, self.value.to_string())
 
@@ -378,13 +459,20 @@ class GradientEditor(wx.propgrid.PGEditor):
         """
         return True
     
+    def OnClick(self, event):
+        ...
+    
 class ColorSchemeProperty(wx.propgrid.PGProperty):
     def __init__(self, label, name, value=None):
         super().__init__(label, name)
         self.SetValue(value)
-
-    def OnSetValue(self):
-        ...
     
     def GetValueAsString(self, argFlags = 0):
         return self.GetValue().to_string()
+    
+    def OnEvent(self, propgrid: wx.propgrid.PropertyGrid, wnd_primary: wx.Window, event: wx.Event) -> bool:
+        if event.GetEventType() == wx.wxEVT_BUTTON:
+            dlg = ColorSchemeDialog(propgrid, self.GetValue())
+            if dlg.ShowModal() == wx.ID_OK:
+                self.SetValue(dlg.get_value())
+        return True
