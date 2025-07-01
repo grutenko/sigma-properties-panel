@@ -3,6 +3,7 @@ import wx.propgrid
 import json
 
 from color_scheme import ColorSchemeProperty, ColorScheme, GradientEditor
+from scale import ScaleProperty, ScaleEditor, Scale
 
 
 class PropertiesPanel(wx.Panel):
@@ -13,9 +14,11 @@ class PropertiesPanel(wx.Panel):
             self, style=wx.propgrid.PG_SPLITTER_AUTO_CENTER
         )
         self.pg.RegisterEditor(GradientEditor(), "gradient_editor")
+        self.pg.RegisterEditor(ScaleEditor, "scale_editor")
         p = self.pg.Append(wx.propgrid.StringProperty("Имя объекта", "name"))
-        p = self.pg.Append(wx.propgrid.FloatProperty("Масштаб", "scale"))
-        p.SetEditor(wx.propgrid.PGEditor_TextCtrlAndButton)
+        p = self.pg.Append(ScaleProperty("Масштаб", "scale"))
+        p.SetValue(Scale(100, 200, 150))
+        p.SetEditor("scale_editor")
         c = self.pg.Append(wx.propgrid.PropertyCategory("Цветовая схема"))
         p = self.pg.AppendIn(c,
             ColorSchemeProperty(

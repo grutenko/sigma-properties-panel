@@ -324,11 +324,28 @@ class ColorSchemeDialog(wx.Dialog):
             parent,
             title="Настройка цветовой схемы",
             style=wx.DEFAULT_DIALOG_STYLE,
-            size=wx.Size(400, 130),
+            size=wx.Size(400, 180),
         )
         sz = wx.BoxSizer(wx.VERTICAL)
         self.picker = ColorSchemePicker(self, value, size=wx.Size(350, 50))
         sz.Add(self.picker, 0, wx.EXPAND | wx.BOTTOM, 10)
+        self.cp = wx.CollapsiblePane(self, label="Масштабирование")
+        pane = self.cp.GetPane()
+        p_sz = wx.BoxSizer(wx.VERTICAL)
+        label = wx.StaticText(pane, label="От")
+        p_sz.Add(label)
+        self.min_field = wx.SpinCtrlDouble(pane, min=-1000000, max=10000000)
+        self.min_field.SetValue(self.get_value().min_value())
+        p_sz.Add(self.min_field, 0, wx.EXPAND)
+        label = wx.StaticText(pane, label="До")
+        p_sz.Add(label)
+        self.max_field = wx.SpinCtrlDouble(pane, min=-10000000, max=100000000)
+        self.max_field.SetValue(self.get_value().max_value())
+        p_sz.Add(self.max_field, 0, wx.EXPAND | wx.BOTTOM, border=10)
+        self.scale_btn = wx.Button(pane, label="Масштабировать")
+        p_sz.Add(self.scale_btn, 0, wx.BOTTOM, border=10)
+        pane.SetSizer(p_sz)
+        sz.Add(self.cp, 1, wx.GROW | wx.BOTTOM | wx.LEFT | wx.RIGHT, border=10)
         btn_sz = wx.BoxSizer(wx.HORIZONTAL)
         self.btn_load = wx.Button(self, wx.ID_OPEN, "Загрузить")
         self.btn_save = wx.Button(self, wx.ID_SAVE, "Сохранить")
