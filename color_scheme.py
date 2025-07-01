@@ -6,6 +6,7 @@ from typing import List
 
 from ruler import RulerWidget
 
+
 @dataclasses.dataclass
 class ColorScheme:
     schema: List
@@ -39,13 +40,43 @@ class ColorScheme:
     def to_string(self):
         schema = list(map(lambda o: list(o), self.schema))
         return json.dumps(schema)
-    
+
     @classmethod
     def from_string(cls, json_str: str):
         schema = json.loads(json_str)
         schema = list(map(lambda o: (o[0], o[1], o[2], o[3]), schema))
         return cls(schema)
+
+    @classmethod
+    def from_paraview(cls, paraview_rgb_list):
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i : i + n]
+
+        schema = []
+        for o in chunks(paraview_rgb_list, 4):
+            schema.append(
+                (
+                    int(256 * o[1] - 1),
+                    int(256 * o[2] - 1),
+                    int(256 * o[3] - 1),
+                    o[0],
+                )
+            )
+
+        return cls(schema)
     
+    def to_paraview(self):
+        schema = []
+        for o in self.schema:
+            schema.append(o[3])
+            schema.append(o[0] / 256)
+            schema.append(o[1] / 256)
+            schema.append(o[2] / 256)
+        return schema
+
+
 def get_interpol_color_by_pos(color_scheme: ColorScheme, pos: float):
     if pos < color_scheme.min_value() or pos > color_scheme.max_value():
         return wx.Colour(0, 0, 0)
@@ -195,6 +226,10 @@ class ColorSchemePicker(wx.Panel):
                     self.gradient.Refresh()
                     self.gradient.Update()
                 dlg.Destroy()
+        else:
+            self.value.schema.sort(key=lambda o: o[3])
+            self.Refresh()
+            self.Update()
 
         self.dragged = False
 
@@ -225,7 +260,6 @@ class ColorSchemePicker(wx.Panel):
             p = x * (self.value.range() / width)
             r, g, b, p_old = self.value.schema[self.dragged_index]
             self.value.schema[self.dragged_index] = (r, g, b, p_old + p)
-            self.value.schema.sort(key=lambda o: o[3])
             self.ruler.draw()
             self.gradient.Refresh()
             self.gradient.Update()
@@ -324,32 +358,37 @@ class ColorSchemeDialog(wx.Dialog):
         return self.picker.value
 
     def on_save(self, event):
-        wildcard = "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
+        wildcard = (
+            "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
+        )
 
         with wx.FileDialog(
             self,
             message="Сохранить цветовую схему",
             wildcard=wildcard,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 with open(dlg.GetPath(), "w") as f:
                     self.picker.value.save(f)
 
     def on_load(self, event):
-        wildcard = "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
+        wildcard = (
+            "Color Scheme Files (*.colorscheme)|*.colorscheme|All files (*.*)|*.*"
+        )
 
         with wx.FileDialog(
             self,
             message="Открыть цветовую схему",
             wildcard=wildcard,
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
         ) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 with open(dlg.GetPath(), "r") as f:
                     self.picker.value = ColorScheme.load(f)
                     self.picker.Refresh()
                     self.picker.Update()
+
 
 class GradientPanel(wx.Panel):
     def __init__(self, parent, style, pos, size):
@@ -382,7 +421,12 @@ class GradientPanel(wx.Panel):
             value = self.value.min_value() + (i / width) * self.value.range()
             color = get_interpol_color_by_pos(self.value, value)
             dc.SetPen(wx.Pen(color))
-            dc.DrawLine(i + rect.GetLeft(), rect.GetTop(), i + rect.GetLeft(), height + rect.GetTop())
+            dc.DrawLine(
+                i + rect.GetLeft(),
+                rect.GetTop(),
+                i + rect.GetLeft(),
+                height + rect.GetTop(),
+            )
 
     def set_color_scheme(self, color_scheme):
         self.value = color_scheme
@@ -397,13 +441,15 @@ class GradientEditor(wx.propgrid.PGEditor):
         panel.set_color_scheme(property.GetValue())
 
         return wx.propgrid.PGWindowList(panel)
-    
+
     def UpdateControl(self, property: wx.propgrid.PGProperty, ctrl: wx.Window) -> None:
         ctrl.set_color_scheme(property.GetValue())
 
-    def SetControlStringValue(self, property: wx.propgrid.PGProperty, ctrl: wx.Window, txt: str) -> None:
+    def SetControlStringValue(
+        self, property: wx.propgrid.PGProperty, ctrl: wx.Window, txt: str
+    ) -> None:
         ctrl.set_color_scheme(property.GetValue())
-    
+
     def get_color(self, scheme, value):
         if value < scheme.min_value() or value > scheme.max_value():
             return wx.Colour(0, 0, 0)
@@ -417,10 +463,10 @@ class GradientEditor(wx.propgrid.PGEditor):
                 b = int(c0[2] + ratio * (c1[2] - c0[2]))
                 return wx.Colour(r, g, b)
         return wx.Colour(255, 255, 255)
-    
+
     def DrawValue(self, dc, rect, property, text):
         propvalue = ColorScheme.from_string(text)
-        stops = getattr(propvalue, 'schema')
+        stops = getattr(propvalue, "schema")
         self.value = propvalue
 
         if not stops or len(stops) < 2:
@@ -438,7 +484,12 @@ class GradientEditor(wx.propgrid.PGEditor):
             value = propvalue.min_value() + (i / width) * propvalue.range()
             color = self.get_color(propvalue, value)
             dc.SetPen(wx.Pen(color))
-            dc.DrawLine(i + rect.GetLeft(), rect.GetTop(), i + rect.GetLeft(), height + rect.GetTop())
+            dc.DrawLine(
+                i + rect.GetLeft(),
+                rect.GetTop(),
+                i + rect.GetLeft(),
+                height + rect.GetTop(),
+            )
 
     def OnPaint(self, event):
         if self.value is None:
@@ -451,26 +502,37 @@ class GradientEditor(wx.propgrid.PGEditor):
 
         self.DrawValue(dc, rect, None, self.value.to_string())
 
-    def OnEvent(self, propgrid: wx.propgrid.PropertyGrid, property: wx.propgrid.PGProperty, wnd_primary: wx.Window, event: wx.Event) -> bool:
+    def OnEvent(
+        self,
+        propgrid: wx.propgrid.PropertyGrid,
+        property: wx.propgrid.PGProperty,
+        wnd_primary: wx.Window,
+        event: wx.Event,
+    ) -> bool:
         """
         OnEvent(propgrid, property, wnd_primary, event) -> bool
-        
+
         Handles events.
         """
         return True
-    
-    def OnClick(self, event):
-        ...
-    
+
+    def OnClick(self, event): ...
+
+
 class ColorSchemeProperty(wx.propgrid.PGProperty):
     def __init__(self, label, name, value=None):
         super().__init__(label, name)
         self.SetValue(value)
-    
-    def GetValueAsString(self, argFlags = 0):
+
+    def GetValueAsString(self, argFlags=0):
         return self.GetValue().to_string()
-    
-    def OnEvent(self, propgrid: wx.propgrid.PropertyGrid, wnd_primary: wx.Window, event: wx.Event) -> bool:
+
+    def OnEvent(
+        self,
+        propgrid: wx.propgrid.PropertyGrid,
+        wnd_primary: wx.Window,
+        event: wx.Event,
+    ) -> bool:
         if event.GetEventType() == wx.wxEVT_BUTTON:
             dlg = ColorSchemeDialog(propgrid, self.GetValue())
             if dlg.ShowModal() == wx.ID_OK:
