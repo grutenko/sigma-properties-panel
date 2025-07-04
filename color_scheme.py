@@ -45,7 +45,7 @@ class ColorScheme:
     def from_string(cls, json_str: str):
         schema = json.loads(json_str)
         schema = list(map(lambda o: (o[0], o[1], o[2], o[3]), schema))
-        return cls(schema)
+        return cls(sorted(schema, key=lambda o: o[3]))
 
     @classmethod
     def from_paraview(cls, paraview_rgb_list):
@@ -65,7 +65,7 @@ class ColorScheme:
                 )
             )
 
-        return cls(schema)
+        return cls(sorted(schema, key=lambda o: o[3]))
     
     def to_paraview(self):
         schema = []
@@ -83,6 +83,7 @@ def get_interpol_color_by_pos(color_scheme: ColorScheme, pos: float):
     for i in range(len(color_scheme.schema) - 1):
         c0 = color_scheme.schema[i]
         c1 = color_scheme.schema[i + 1]
+    
         if c0[3] <= pos <= c1[3]:
             ratio = (pos - c0[3]) / (c1[3] - c0[3])
             r = int(c0[0] + ratio * (c1[0] - c0[0]))
@@ -323,7 +324,7 @@ class ColorSchemeDialog(wx.Dialog):
         super().__init__(
             parent,
             title="Настройка цветовой схемы",
-            style=wx.DEFAULT_DIALOG_STYLE,
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
             size=wx.Size(400, 180),
         )
         sz = wx.BoxSizer(wx.VERTICAL)
@@ -352,7 +353,7 @@ class ColorSchemeDialog(wx.Dialog):
         self.btn_load.Bind(wx.EVT_BUTTON, self.on_load)
         self.btn_save.Bind(wx.EVT_BUTTON, self.on_save)
         btn_sz.Add(self.btn_load)
-        btn_sz.Add(self.btn_save)
+        btn_sz.Add(self.btn_save, 1, wx.RIGHT, border=20)
         sz.Add(btn_sz, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
         btn_sz.AddStretchSpacer()
         self.btn_cancel = wx.Button(self, label="Отменить")

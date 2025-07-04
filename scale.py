@@ -23,7 +23,6 @@ class ScaleEditorPanel(wx.Panel):
             maxValue=100,
             style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS
         )
-        self.slider.Bind(wx.EVT_SLIDER, self.on_slider)
         sz.Add(self.slider, 1, wx.EXPAND | wx.RIGHT, border=5)
         self.max_field = wx.TextCtrl(self, size=wx.Size(30, -1))
         sz.Add(self.max_field, 0, wx.EXPAND)
