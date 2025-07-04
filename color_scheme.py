@@ -58,9 +58,9 @@ class ColorScheme:
         for o in chunks(paraview_rgb_list, 4):
             schema.append(
                 (
-                    int(256 * o[1] - 1),
-                    int(256 * o[2] - 1),
-                    int(256 * o[3] - 1),
+                    int(255 * o[1]),
+                    int(255 * o[2]),
+                    int(255 * o[3]),
                     o[0],
                 )
             )
@@ -71,9 +71,9 @@ class ColorScheme:
         schema = []
         for o in self.schema:
             schema.append(o[3])
-            schema.append(o[0] / 256)
-            schema.append(o[1] / 256)
-            schema.append(o[2] / 256)
+            schema.append(o[0] / 255)
+            schema.append(o[1] / 255)
+            schema.append(o[2] / 255)
         return schema
 
 
